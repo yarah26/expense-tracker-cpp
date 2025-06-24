@@ -1,75 +1,217 @@
-C++ Console Expense Tracker
-A simple yet effective command-line expense tracker application written in C++. This tool allows users to add, view, and manage their daily expenses and income, save the data to a file, and load it back.
+#include <iostream>
+#include <fstream>
+#include <string>
+#include <stdexcept>
 
-Features
-Add Expenses: Record new expenses with a specific date, amount, and category.
+using namespace std;
 
-Add Income: Record incoming funds.
+class Expense {
+private:
+    string category;
+    string date;
+    double amount;
 
-Categorize Spending: Assign expenses to predefined categories (Bills, Entertainment, Food, Transportation).
+public:
+    Expense() : category(""), date(""), amount(0.0) {}
+    Expense(const string& category, const string& date, double amount)
+        : category(category), date(date), amount(amount) {
+    }
 
-View All Records: Display a complete list of all recorded expenses and income.
+    string getCategory() const { return category; }
+    string getDate() const { return date; }
+    double getAmount() const { return amount; }
 
-Monthly Summary: Calculate and display the total amount spent in a specific month and year.
+    void display() const {
+        cout << "Date: " << date << " | Category: " << category << " | Amount: " << amount << " Ft" << endl;
+    }
 
-Data Persistence: Automatically save all records to a expenses.txt file and load them upon startup.
+    string toFileString() const {
+        return date + "," + category + "," + to_string(amount);
+    }
 
-Dynamic Memory: The application dynamically adjusts memory allocation for the list of expenses.
+    static Expense fromFileString(const string& line) {
+        size_t pos1 = line.find(',');
+        size_t pos2 = line.find(',', pos1 + 1);
 
-Getting Started
-Prerequisites
-To compile and run this project, you will need a C++ compiler (like g++).
+        string date = line.substr(0, pos1);
+        string category = line.substr(pos1 + 1, pos2 - pos1 - 1);
+        double amount = stod(line.substr(pos2 + 1));
 
-Compilation
-Clone the repository or save the main.cpp file to your local machine.
+        return Expense(category, date, amount);
+    }
+};
 
-Open a terminal or command prompt.
+class ExpenseTracker {
+private:
+    Expense** expenses;
+    int count;
+    int capacity;
 
-Navigate to the directory where you saved the file.
+    void resize() {
+        int newCapacity = capacity * 2;
+        Expense** newArray = new Expense * [newCapacity];
+        for (int i = 0; i < count; ++i) {
+            newArray[i] = expenses[i];
+        }
+        delete[] expenses;
+        expenses = newArray;
+        capacity = newCapacity;
+    }
 
-Compile the code using g++:
+public:
+    ExpenseTracker() {
+        count = 0;
+        capacity = 10;
+        expenses = new Expense * [capacity];
+    }
 
-g++ main.cpp -o ExpenseTracker -std=c++11
+    ~ExpenseTracker() {
+        for (int i = 0; i < count; ++i) {
+            delete expenses[i];
+        }
+        delete[] expenses;
+    }
 
-Running the Application
-After successful compilation, an executable file named ExpenseTracker (or ExpenseTracker.exe on Windows) will be created. Run it from the terminal:
+    void addExpense(const string& category, const string& date, double amount) {
+        if (amount < 0) throw invalid_argument("Amount cannot be negative.");
+        if (count >= capacity) resize();
+        expenses[count++] = new Expense(category, date, amount);
+    }
 
-./ExpenseTracker
+    void viewExpenses() const {
+        if (count == 0) {
+            cout << "No expenses recorded.\n";
+            return;
+        }
+        for (int i = 0; i < count; ++i) {
+            expenses[i]->display();
+        }
+    }
 
-How to Use
-Once the application is running, you will be greeted with a menu of options:
+    void viewTotalSpentByMonth(const string& yearMonth) const {
+        double total = 0;
+        for (int i = 0; i < count; ++i) {
+            if (expenses[i]->getDate().substr(0, 7) == yearMonth &&
+                expenses[i]->getCategory() != "Income") {
+                total += expenses[i]->getAmount();
+            }
+        }
+        cout << "Total spent in " << yearMonth << ": " << total << " Ft" << endl;
+    }
 
-1. Add Expense
-2. Add Income
-3. View All Records
-4. View Total Spent by Month
-5. Save & Exit
-Choose an option:
+    void saveToFile(const string& filename) const {
+        ofstream outFile(filename);
+        if (!outFile) throw ios_base::failure("Cannot open file for writing.");
+        for (int i = 0; i < count; ++i) {
+            outFile << expenses[i]->toFileString() << endl;
+        }
+        outFile.close();
+    }
 
-Add Expense: Prompts you to choose a category, and then enter the date (in YYYY-MM-DD format) and the amount.
+    void loadFromFile(const string& filename) {
+        ifstream inFile(filename);
+        if (!inFile) return;
 
-Add Income: Prompts you to enter the date and the income amount.
+        string line;
+        while (getline(inFile, line)) {
+            Expense e = Expense::fromFileString(line);
+            addExpense(e.getCategory(), e.getDate(), e.getAmount());
+        }
+        inFile.close();
+    }
+};
 
-View All Records: Lists all transactions, showing the date, category, and amount for each.
+string chooseCategory() {
+    int choice;
+    cout << "Choose a category:\n";
+    cout << "1. Bills\n";
+    cout << "2. Entertainment\n";
+    cout << "3. Food\n";
+    cout << "4. Transportation\n";
+    cout << "Enter your choice (1-4): ";
+    cin >> choice;
 
-View Total Spent by Month: Asks for a year and month (in YYYY-MM format) and calculates the total expenses for that period (excluding income).
+    switch (choice) {
+    case 1: return "Bills";
+    case 2: return "Entertainment";
+    case 3: return "Food";
+    case 4: return "Transportation";
+    default: cout << "Invalid choice. Defaulting to 'Other'\n"; return "Other";
+    }
+}
 
-Save & Exit: Saves all current data to expenses.txt and closes the application.
+int main() {
+    ExpenseTracker tracker;
+    int choice;
+    string category, date, filename = "expenses.txt";
+    double amount;
 
-File Structure
-The application will automatically create and manage a file named expenses.txt in the same directory where the executable is located. This file stores your expense and income data in a comma-separated format (date,category,amount).
+    try {
+        tracker.loadFromFile(filename);
+    }
+    catch (...) {
+        cout << "Could not load previous data. Starting fresh.\n";
+    }
 
-Example expenses.txt content:
+    do {
+        cout << "\n1. Add Expense\n2. Add Income\n3. View All Records\n4. View Total Spent by Month\n5. Save & Exit\nChoose an option: ";
+        cin >> choice;
 
-2024-07-21,Food,15.75
-2024-07-22,Income,1200.00
-2024-07-23,Bills,85.50
+        switch (choice) {
+        case 1:
+            category = chooseCategory();
+            cout << "Enter date (YYYY-MM-DD): ";
+            cin >> date;
+            cout << "Enter amount: ";
+            cin >> amount;
+            try {
+                tracker.addExpense(category, date, amount);
+            }
+            catch (const exception& e) {
+                cout << "Error: " << e.what() << endl;
+            }
+            break;
 
-Code Structure
-The program is built around two main classes:
+        case 2:
+            cout << "Enter date (YYYY-MM-DD): ";
+            cin >> date;
+            cout << "Enter income amount: ";
+            cin >> amount;
+            try {
+                tracker.addExpense("Income", date, amount);
+            }
+            catch (const exception& e) {
+                cout << "Error: " << e.what() << endl;
+            }
+            break;
 
-Expense: Represents a single financial transaction, holding its date, category, and amount.
+        case 3:
+            tracker.viewExpenses();
+            break;
 
-ExpenseTracker: Manages a collection of Expense objects. It handles adding new expenses, displaying records, calculating totals, and managing file I/O.
+        case 4: {
+            string yearMonth;
+            cout << "Enter year and month (YYYY-MM): ";
+            cin >> yearMonth;
+            tracker.viewTotalSpentByMonth(yearMonth);
+            break;
+        }
 
-The main() function contains the user interface logic, presenting the menu and handling user input.
+        case 5:
+            try {
+                tracker.saveToFile(filename);
+                cout << "Data saved. Exiting.\n";
+            }
+            catch (const exception& e) {
+                cout << "Error saving file: " << e.what() << endl;
+            }
+            break;
+
+        default:
+            cout << "Invalid option.\n";
+        }
+
+    } while (choice != 5);
+
+    return 0;
+}
